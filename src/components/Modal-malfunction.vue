@@ -1,7 +1,6 @@
 <template>
   <div class="modal-overlay" @click.self="closeModal">
     <div class="modal-content">
-      <span class="close" @click="closeModal">&times;</span>
       <slot></slot>
     </div>
   </div>
@@ -44,20 +43,5 @@ export default {
   width: 90%;
   max-width: 700px;
   position: relative;
-}
-
-.close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  color: #aaa;
-  font-size: 28px;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-.close:hover,
-.close:focus {
-  color: black;
 }
 </style>
