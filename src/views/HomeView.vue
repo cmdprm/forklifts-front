@@ -1,4 +1,48 @@
 <template>
+  <modal-malfunction
+    v-if="showAddMalfunctionModal"
+    @close="closeAddMalfunctionModal"
+  >
+    <form @submit.prevent="saveNewMalfunction" class="modal-form">
+      <div class="text-center p-4">
+        <p>Проблемы с погрузчиком? Опишите</p>
+      </div>
+      <div class="red-divider"></div>
+      <div class="flex justify-between p-4">
+        <div class="flex items-center">
+          <p class="me-5">Начало</p>
+          <input
+            v-model="newMalfunction.detected_at"
+            type="datetime-local"
+            required
+          />
+        </div>
+        <div class="flex items-center">
+          <p class="me-5">Окончание</p>
+          <input
+            v-model="newMalfunction.resolved_at"
+            type="datetime-local"
+            required
+          />
+        </div>
+      </div>
+      <div>
+        <p>Описание инцидента</p>
+        <textarea v-model="newMalfunction.description" required></textarea>
+      </div>
+      <div class="flex justify-between">
+        <button type="submit" class="default-button">Сохранить</button>
+        <button
+          type="button"
+          @click="closeAddMalfunctionModal"
+          class="default-button"
+        >
+          Выход
+        </button>
+      </div>
+    </form>
+  </modal-malfunction>
+
   <div>
     <p class="text-2xl font-bold">Справочник погрузчиков</p>
     <div class="flex items-center mt-5">
@@ -31,7 +75,7 @@
       </button>
       <button
         class="default-button me-5"
-        @click="deleteForklift"
+        @click="confirmDeleteForklift"
         :disabled="!selectedForklift || isAddingForklift"
       >
         Удалить
@@ -45,8 +89,9 @@
       </button>
       <button
         class="default-button"
-        @click="cancelForkliftEditing"
+        @click="confirmCancelForkliftEditing"
         v-if="isEditingForklift || isAddingForklift"
+        :disabled="!isEditingForklift && !isAddingForklift"
       >
         Отменить
       </button>
@@ -84,11 +129,16 @@
                 </td>
                 <td class="border border-slate-300 p-5">
                   <input
-                    v-if="
-                      (isEditingForklift &&
-                        selectedForklift &&
-                        selectedForklift.id === forklift.id) ||
-                      (isAddingForklift && newForklift === forklift)
+                    v-if="isAddingForklift && newForklift === forklift"
+                    v-model="newForklift.brand"
+                    class="edit-input"
+                    @click.stop
+                  />
+                  <input
+                    v-else-if="
+                      isEditingForklift &&
+                      selectedForklift &&
+                      selectedForklift.id === forklift.id
                     "
                     v-model="selectedForklift.brand"
                     class="edit-input"
@@ -98,11 +148,16 @@
                 </td>
                 <td class="border border-slate-300 p-5">
                   <input
-                    v-if="
-                      (isEditingForklift &&
-                        selectedForklift &&
-                        selectedForklift.id === forklift.id) ||
-                      (isAddingForklift && newForklift === forklift)
+                    v-if="isAddingForklift && newForklift === forklift"
+                    v-model="newForklift.number"
+                    class="edit-input"
+                    @click.stop
+                  />
+                  <input
+                    v-else-if="
+                      isEditingForklift &&
+                      selectedForklift &&
+                      selectedForklift.id === forklift.id
                     "
                     v-model="selectedForklift.number"
                     class="edit-input"
@@ -112,11 +167,16 @@
                 </td>
                 <td class="border border-slate-300 p-5">
                   <input
-                    v-if="
-                      (isEditingForklift &&
-                        selectedForklift &&
-                        selectedForklift.id === forklift.id) ||
-                      (isAddingForklift && newForklift === forklift)
+                    v-if="isAddingForklift && newForklift === forklift"
+                    v-model="newForklift.capacity"
+                    class="edit-input"
+                    @click.stop
+                  />
+                  <input
+                    v-else-if="
+                      isEditingForklift &&
+                      selectedForklift &&
+                      selectedForklift.id === forklift.id
                     "
                     v-model="selectedForklift.capacity"
                     class="edit-input"
@@ -141,7 +201,7 @@
             </p>
             <div class="flex items-center justify-between mt-2">
               <div class="flex">
-                <button class="small-button me-5" @click="addMalfunction">
+                <button class="small-button me-5" @click="showModal">
                   Добавить
                 </button>
                 <button
@@ -259,9 +319,13 @@
 
 <script>
 import apiClient from "@/services/axios.js";
+import ModalMalfunction from "@/components/Modal-malfunction.vue";
 
 export default {
   name: "HomeView",
+  components: {
+    ModalMalfunction,
+  },
   data() {
     return {
       forklifts: [],
@@ -275,6 +339,13 @@ export default {
       selectedMalfunction: null,
       isEditingMalfunction: false,
       originalMalfunction: null,
+      showAddMalfunctionModal: false,
+      newMalfunction: {
+        detected_at: "",
+        resolved_at: "",
+        description: "",
+        forklift_id: null,
+      },
     };
   },
   methods: {
@@ -323,8 +394,6 @@ export default {
       this.isAddingForklift = false;
       this.newForklift = null;
 
-      console.log("Выбрано:", this.selectedForklift);
-
       this.fetchMalfunctions();
     },
     startAddingForklift() {
@@ -353,11 +422,9 @@ export default {
           this.isAddingForklift = false;
           this.newForklift = null;
 
-          // Обновить список погрузчиков после добавления нового
           this.fetchForklifts();
         } catch (error) {
           console.error("Ошибка при добавлении погрузчика:", error);
-          // Удалить новый погрузчик из списка, если сохранение не удалось
           this.forklifts.pop();
           this.newForklift = null;
           this.isAddingForklift = false;
@@ -375,16 +442,37 @@ export default {
         this.fetchForklifts();
       }
     },
+    confirmCancelForkliftEditing() {
+      const confirmCancel = window.confirm(
+        "Не сохранять внесенные изменения? Вы уверены?"
+      );
+      if (confirmCancel) {
+        this.cancelForkliftEditing();
+      }
+    },
     cancelForkliftEditing() {
       if (this.isAddingForklift) {
-        // Удалить новый погрузчик из списка при отмене добавления
         this.forklifts.pop();
         this.isAddingForklift = false;
         this.newForklift = null;
       } else if (this.isEditingForklift) {
-        // Восстановить изначальное состояние выбранного погрузчика при отмене редактирования
         this.selectedForklift = { ...this.originalForklift };
         this.isEditingForklift = false;
+      }
+    },
+    async confirmDeleteForklift() {
+      if (this.selectedForklift) {
+        if (this.malfunctions.length > 0) {
+          alert(
+            "Невозможно удалить погрузчик, так как для него зарегистрированы простои."
+          );
+          return;
+        }
+
+        const confirmDelete = window.confirm("Удалить погрузчик? Вы уверены?");
+        if (confirmDelete) {
+          await this.deleteForklift();
+        }
       }
     },
     async deleteForklift() {
@@ -401,33 +489,84 @@ export default {
         }
       }
     },
+    showModal() {
+      this.showAddMalfunctionModal = true;
+    },
     selectMalfunction(malfunction) {
       this.selectedMalfunction = { ...malfunction };
       this.originalMalfunction = { ...malfunction };
     },
-    addMalfunction() {
-      // Логика добавления нового простоя
+    async saveNewMalfunction() {
+      try {
+        this.newMalfunction.forklift_id = this.selectedForklift.id;
+        const response = await apiClient.post(
+          `malfunctions/`,
+          this.newMalfunction
+        );
+        this.malfunctions.push(response.data);
+        this.showAddMalfunctionModal = false;
+        this.newMalfunction = {
+          detected_at: "",
+          resolved_at: "",
+          description: "",
+          forklift_id: null,
+        };
+      } catch (error) {
+        console.error("Ошибка при добавлении инцидента:", error);
+      }
     },
     editMalfunction() {
       this.isEditingMalfunction = true;
     },
     saveMalfunctionChanges() {
-      // Логика сохранения изменений простоя
-      this.isEditingMalfunction = false;
+      if (this.selectedMalfunction) {
+        apiClient
+          .put(
+            `malfunctions/${this.selectedMalfunction.id}`,
+            this.selectedMalfunction
+          )
+          .then(() => {
+            this.isEditingMalfunction = false;
+            this.fetchMalfunctions();
+          })
+          .catch((error) => {
+            console.error("Ошибка при сохранении изменений простоя:", error);
+          });
+      }
     },
     cancelMalfunctionEditing() {
-      this.selectedMalfunction = { ...this.originalMalfunction };
-      this.isEditingMalfunction = false;
+      if (this.originalMalfunction) {
+        this.selectedMalfunction = { ...this.originalMalfunction };
+        this.isEditingMalfunction = false;
+      }
     },
     deleteMalfunction() {
-      // Логика удаления простоя
+      if (this.selectedMalfunction) {
+        const confirmDelete = window.confirm(
+          "Удалить запись о простое? Вы уверены?"
+        );
+        if (confirmDelete) {
+          this.performDeleteMalfunction();
+        }
+      }
+    },
+    async performDeleteMalfunction() {
+      try {
+        await apiClient.delete(`malfunctions/${this.selectedMalfunction.id}`);
+        this.malfunctions = this.malfunctions.filter(
+          (malfunction) => malfunction.id !== this.selectedMalfunction.id
+        );
+        this.selectedMalfunction = null;
+      } catch (error) {
+        console.error("Ошибка при удалении записи о простое:", error);
+      }
     },
     calculateDowntime(malfunction) {
       if (!malfunction.detected_at || !malfunction.resolved_at) return "";
 
       const detected = new Date(malfunction.detected_at);
       const resolved = new Date(malfunction.resolved_at);
-      const downtime = Math.abs(resolved - detected) / 1000; // Время простоя в секундах
+      const downtime = Math.abs(resolved - detected) / 1000;
 
       const hours = Math.floor(downtime / 3600);
       const minutes = Math.floor((downtime % 3600) / 60);
@@ -437,6 +576,9 @@ export default {
     resetFilter() {
       this.searchQuery = "";
       this.fetchForklifts();
+    },
+    closeAddMalfunctionModal() {
+      this.showAddMalfunctionModal = false;
     },
   },
   mounted() {
@@ -483,6 +625,10 @@ export default {
   background: rgb(176, 16, 48);
 }
 
+.default-button:disabled {
+  background: rgb(101, 101, 101);
+}
+
 .forklift-table,
 .malfunction-table {
   width: 100%;
@@ -518,5 +664,18 @@ export default {
   width: 100%;
   padding: 8px;
   box-sizing: border-box;
+}
+
+.red-divider {
+  height: 2px;
+  width: 100%;
+  background-color: rgb(176, 16, 48);
+}
+
+.modal-form textarea {
+  width: 100%;
+  border-radius: 0.75em;
+  padding: 10px;
+  border: 2px gray solid;
 }
 </style>
